@@ -179,10 +179,10 @@ func parseArg(arg string) (isFlag bool, isTerminator bool, flagName string, hasI
 	return true, false, flagName, hasInlineValue
 }
 
-func StripUnknownFlags(flagSet *flag.FlagSet, args []string) []string {
+func StripUnknownFlags(flagSet *flag.FlagSet, args []string) (res, stripped []string) {
 	formalFlagNames := getFormalFlagNames(flagSet)
 
-	res := make([]string, 0, len(args))
+	res = make([]string, 0, len(args))
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		isFlag, isTerminator, flagName, hasInlineValue := parseArg(arg)
@@ -199,9 +199,13 @@ func StripUnknownFlags(flagSet *flag.FlagSet, args []string) []string {
 			res = append(res, arg)
 			continue
 		}
+		stripped = append(stripped, arg)
 		if !hasInlineValue && !isBoolFlag {
+			if i+1 < len(args) {
+				stripped = append(stripped, args[i+1])
+			}
 			i++ // strip next arg (current flag value)
 		}
 	}
-	return res
+	return res, stripped
 }

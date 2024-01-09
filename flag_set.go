@@ -37,6 +37,7 @@ type FlagSet struct {
 	registeredFields            map[any]structRegisteredFields
 	ignoreUnknown               bool
 	allowParsingMultipleAliases bool
+	ignoredArgs                 []string
 }
 
 // Wrap creates a new FlagSet wrapping the given `stdFlagSet` and does not set stdFlagSet.Usage
@@ -74,14 +75,21 @@ func (fls *FlagSet) SetIgnoreUnknown(ignore bool) {
 	fls.ignoreUnknown = ignore
 }
 
+// GetIgnoredArgs returns a slice of arguments that were ignored during the last call to Parse()
+// because of SetIgnoreUnknown(true), nil otherwise
+func (fls *FlagSet) GetIgnoredArgs() []string {
+	return fls.ignoredArgs
+}
+
 // Parse parses the command-line flags calling Parse on the wrapped FlagSet
 // and then sets values of the registered structs fields for flags that were actually parsed.
 func (fls *FlagSet) Parse(arguments []string) error {
 	if fls.FlagSet == nil {
 		return errors.New("wrapped FlagSet is nil")
 	}
+	fls.ignoredArgs = nil
 	if fls.ignoreUnknown {
-		arguments = StripUnknownFlags(fls.FlagSet, arguments)
+		arguments, fls.ignoredArgs = StripUnknownFlags(fls.FlagSet, arguments)
 	}
 	if err := fls.FlagSet.Parse(arguments); err != nil {
 		return err

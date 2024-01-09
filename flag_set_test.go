@@ -372,6 +372,7 @@ func TestIgnoreUnknownTags(t *testing.T) {
 	require.Equal(t, 1, structVal.Int)
 	require.Equal(t, "abc", structVal.Str)
 	require.ElementsMatch(t, []string{"def"}, structVal.A)
+	require.ElementsMatch(t, []string{"--unknown", "2"}, fls.GetIgnoredArgs())
 }
 
 type testNestedStruct struct {

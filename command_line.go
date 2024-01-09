@@ -51,6 +51,12 @@ func SetIgnoreUnknown(ignore bool) {
 	CommandLine.SetIgnoreUnknown(ignore)
 }
 
+// GetIgnoredArgs returns a slice of arguments that were ignored during the last call to Parse()
+// because of SetIgnoreUnknown(true), nil otherwise
+func GetIgnoredArgs() []string {
+	return CommandLine.GetIgnoredArgs()
+}
+
 // Parse parses the command-line flags using the default FlagSet
 func Parse() error {
 	return CommandLine.Parse(os.Args[1:])

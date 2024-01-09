@@ -136,15 +136,19 @@ if err := flagSet.Parse([]string{
 See tests for more examples.
 
 ## Constructing
-The library provides two constructors: 
+The library provides two constructors for `flago.FlagSet`: 
 - `Wrap(*flag.FlagSet)` that wraps the existing std `flag.FlagSet` instance that can have some flags already registered
 or be used to register new flags using its methods.
 - `NewFlagSet()` creates new `flag.FlagSet` instance and sets its `Usage` to [`flago.DefaultUsage`](#usage-help-message)
+- Functions with the names matching `flago.FlagSet` method names for a default `flago.CommandLine` 
+FlagSet instance are available in the same manner as in the standard `flag` package.
 
 ## Configure `Parse()` behavior
 
 ### 🔹 Ignore unknown flags
 `SetIgnoreUnknown(true)` method call will make `Parse()` ignore unknown flags instead of returning an error.
+
+To retrieve unknown flags that have been ignored, call `GetIgnoredArgs()` after `Parse()`.
 
 ### 🔹 Allow parsing multiple aliases
 `SetAllowParsingMultipleAliases(true)` method call will make `Parse()` not return an error if multiple aliases
@@ -224,9 +228,6 @@ If a field has `encoding.TextUnmarshaler` interface, it also should implement `e
 
 The library will call `FlagSet.TextVar()` on such fields that requires a default "marshaler" value.
 
-## Global functions
-The library provides global functions with the names matching `flago.FlagSet` method names 
-for a default `flago.CommandLine` FlagSet instance in the same manner as the standard `flag` package does.
 
 
 
