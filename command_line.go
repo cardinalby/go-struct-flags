@@ -34,8 +34,21 @@ func StructVarWithPrefix(p any, flagsPrefix string) error {
 	return CommandLine.StructVarWithPrefix(p, flagsPrefix)
 }
 
+// SetAllowParsingMultipleAliases sets the behavior of Parse() when multiple tag names
+// assigned to same field are passed.
+// If `true`, it will be ignored and only the last value will be used.
+// If `false`, Parse() will return an error.
+// Default value is `false`.
 func SetAllowParsingMultipleAliases(allow bool) {
 	CommandLine.SetAllowParsingMultipleAliases(allow)
+}
+
+// SetIgnoreUnknown sets the behavior of Parse() when unknown flags are passed.
+// If `true`, they will be ignored.
+// If `false`, Parse() will return an error.
+// Default value is `false`.
+func SetIgnoreUnknown(ignore bool) {
+	CommandLine.SetIgnoreUnknown(ignore)
 }
 
 // Parse parses the command-line flags using the default FlagSet

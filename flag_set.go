@@ -35,6 +35,7 @@ type FlagSet struct {
 	// registeredFields contains instructions for finishing parsing of the registered structs
 	// key is a pointer to a struct
 	registeredFields            map[any]structRegisteredFields
+	ignoreUnknown               bool
 	allowParsingMultipleAliases bool
 }
 
@@ -65,11 +66,22 @@ func (fls *FlagSet) SetAllowParsingMultipleAliases(allow bool) {
 	fls.allowParsingMultipleAliases = allow
 }
 
+// SetIgnoreUnknown sets the behavior of Parse() when unknown flags are passed.
+// If `true`, they will be ignored.
+// If `false`, Parse() will return an error.
+// Default value is `false`.
+func (fls *FlagSet) SetIgnoreUnknown(ignore bool) {
+	fls.ignoreUnknown = ignore
+}
+
 // Parse parses the command-line flags calling Parse on the wrapped FlagSet
 // and then sets values of the registered structs fields for flags that were actually parsed.
 func (fls *FlagSet) Parse(arguments []string) error {
 	if fls.FlagSet == nil {
 		return errors.New("wrapped FlagSet is nil")
+	}
+	if fls.ignoreUnknown {
+		arguments = StripUnknownFlags(fls.FlagSet, arguments)
 	}
 	if err := fls.FlagSet.Parse(arguments); err != nil {
 		return err

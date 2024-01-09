@@ -8,8 +8,9 @@ The library is a wrapper around the standard library's `flag` package providing 
 to parse command line flags into a struct fields
 
 ## The main features are:
-- More convenient way to define flags using **struct tags**
+- Ignore unknown flags
 - Distinguish **not passed** flags from **default** values that is difficult with the standard `flag` package
+- More convenient way to define flags using **struct tags**
 - Using nested structs for similar flag groups
 
 ## Example
@@ -130,7 +131,19 @@ if err := flagSet.Parse([]string{
 
 See tests for more examples.
 
+## Configure `Parse()` behavior
+
+### Ignore unknown flags
+`SetIgnoreUnknown(true)` method call will make `Parse()` ignore unknown flags instead of returning an error.
+
+### Allow parsing multiple aliases
+`SetAllowParsingMultipleAliases(true)` method call will make `Parse()` not return an error if multiple aliases
+of the same field are passed. The last passed value will be used.
+
 # Supported struct tags
+To parse flags and args to struct fields you should use `StructVar()` method.
+
+The struct fields that don't have any "flag" tags will be ignored. 
 
 ## Define named flag(s) for a field
 
@@ -192,7 +205,11 @@ You can do it manually: `flagSet.Usage = flago.DefaultUsage`
 ### Field types support
 
 `StructVar()` method parses fields and their tags and calls the correspondent `FlagSet.***Var()` methods
-depending on the field type. So fields should have types supported by `flag` package or be pointers to such types.
+depending on the field type. 
+
+So fields should have types supported by `flag` package or be pointers to such types.
+
+Fields  implementing `flag.Value` and `func(string) error` fields are also supported (but can't be pointers).
 
 #### Special case
 If a field has `encoding.TextUnmarshaler` interface, it also should implement `encoding.TextMarshaler`.

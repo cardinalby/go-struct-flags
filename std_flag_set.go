@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 )
 
@@ -13,6 +14,23 @@ func getExistingFlagNames(flagSet *flag.FlagSet) map[string]struct{} {
 	flags := make(map[string]struct{})
 	flagSet.Visit(func(f *flag.Flag) {
 		flags[f.Name] = struct{}{}
+	})
+	return flags
+}
+
+type boolFlag interface {
+	IsBoolFlag() bool
+}
+
+// getFormalFlagNames returns a map where key is a flag name and value indicates it's a bool flag
+func getFormalFlagNames(flagSet *flag.FlagSet) map[string]bool {
+	flags := make(map[string]bool)
+	flagSet.VisitAll(func(f *flag.Flag) {
+		isBoolFlag := false
+		if boolFlag, ok := f.Value.(boolFlag); ok {
+			isBoolFlag = boolFlag.IsBoolFlag()
+		}
+		flags[f.Name] = isBoolFlag
 	})
 	return flags
 }
@@ -27,6 +45,7 @@ type varRegister func(flagSet *flag.FlagSet, name, usage string) postParseClb
 
 func getVarRegister(fieldValue reflect.Value) (varRegister, error) {
 	valueType := fieldValue.Type()
+
 	if valueType.Kind() == reflect.Ptr {
 		valueToParsePtr := reflect.New(valueType.Elem())
 		primitiveVarRegister := getPrimitiveVarRegister(valueToParsePtr.Elem(), reflect.Zero(valueType))
@@ -44,6 +63,13 @@ func getVarRegister(fieldValue reflect.Value) (varRegister, error) {
 	if primitiveVarRegister != nil {
 		return func(flagSet *flag.FlagSet, name, usage string) postParseClb {
 			primitiveVarRegister(flagSet, name, usage)
+			return nil
+		}, nil
+	}
+
+	if flagValue, isFlagValue := fieldValue.Interface().(flag.Value); isFlagValue {
+		return func(flagSet *flag.FlagSet, name, usage string) postParseClb {
+			flagSet.Var(flagValue, name, usage)
 			return nil
 		}, nil
 	}
@@ -128,4 +154,54 @@ func getPrimitiveVarRegister(
 	default:
 		return nil
 	}
+}
+
+func parseArg(arg string) (isFlag bool, isTerminator bool, flagName string, hasInlineValue bool) {
+	if len(arg) < 2 || arg[0] != '-' {
+		return false, false, "", false
+	}
+	numMinuses := 1
+	if arg[1] == '-' {
+		numMinuses++
+		if len(arg) == 2 { // "--" terminates the flags
+			return false, true, "", false
+		}
+	}
+	flagName = arg[numMinuses:]
+
+	if equalsSignIndex := strings.Index(flagName, "="); equalsSignIndex == 0 {
+		// std FlagSet.Parse() will return "bad flag syntax" error
+		return false, false, "", false
+	} else if equalsSignIndex > 0 {
+		flagName = flagName[:equalsSignIndex]
+		hasInlineValue = true
+	}
+	return true, false, flagName, hasInlineValue
+}
+
+func StripUnknownFlags(flagSet *flag.FlagSet, args []string) []string {
+	formalFlagNames := getFormalFlagNames(flagSet)
+
+	res := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		isFlag, isTerminator, flagName, hasInlineValue := parseArg(arg)
+		if isTerminator {
+			res = append(res, args[i:]...)
+			break
+		}
+		if !isFlag {
+			res = append(res, arg)
+			continue
+		}
+		isBoolFlag, exists := formalFlagNames[flagName]
+		if exists {
+			res = append(res, arg)
+			continue
+		}
+		if !hasInlineValue && !isBoolFlag {
+			i++ // strip next arg (current flag value)
+		}
+	}
+	return res
 }

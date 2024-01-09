@@ -273,6 +273,35 @@ func TestTextVar(t *testing.T) {
 	require.Equal(t, "1.2", structVal.T.String())
 }
 
+type strValue struct {
+	v string
+}
+
+func (s *strValue) Set(v string) error {
+	s.v = v
+	return nil
+}
+
+func (s *strValue) String() string {
+	return s.v
+}
+
+func TestFlagValueVar(t *testing.T) {
+	type testStruct struct {
+		S *strValue `flag:"s"`
+	}
+	fls := NewFlagSet("", flag.ContinueOnError)
+	structVal := testStruct{
+		S: &strValue{"default"},
+	}
+	require.NoError(t, fls.StructVarWithPrefix(&structVal, ""))
+	require.NoError(t, fls.Parse(nil))
+	require.Equal(t, "default", structVal.S.v)
+
+	require.NoError(t, fls.Parse([]string{"--s", "abc"}))
+	require.Equal(t, "abc", structVal.S.v)
+}
+
 func TestFuncVar(t *testing.T) {
 	type testStruct struct {
 		F func(string) error `flag:"f"`
@@ -327,6 +356,22 @@ func TestErrorOnMultipleAliasesNames(t *testing.T) {
 	expectedOutput := expectedErrorMsg + "\n" + expectedUsage
 
 	require.Equal(t, expectedOutput, output)
+}
+
+func TestIgnoreUnknownTags(t *testing.T) {
+	type testStruct struct {
+		Int int      `flag:"i"`
+		Str string   `flag:"s"`
+		A   []string `flagArgs:"true"`
+	}
+	fls := NewFlagSet("", flag.ContinueOnError)
+	structVal := testStruct{}
+	require.NoError(t, fls.StructVarWithPrefix(&structVal, ""))
+	fls.SetIgnoreUnknown(true)
+	require.NoError(t, fls.Parse([]string{"--i", "1", "--unknown", "2", "--s=abc", "def"}))
+	require.Equal(t, 1, structVal.Int)
+	require.Equal(t, "abc", structVal.Str)
+	require.ElementsMatch(t, []string{"def"}, structVal.A)
 }
 
 type testNestedStruct struct {
