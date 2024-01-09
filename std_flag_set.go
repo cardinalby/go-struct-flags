@@ -195,16 +195,20 @@ func StripUnknownFlags(flagSet *flag.FlagSet, args []string) (res, stripped []st
 			continue
 		}
 		isBoolFlag, exists := formalFlagNames[flagName]
+		var appendTo *[]string
 		if exists {
-			res = append(res, arg)
-			continue
+			appendTo = &res
+		} else {
+			appendTo = &stripped
 		}
-		stripped = append(stripped, arg)
+
+		*appendTo = append(*appendTo, arg)
 		if !hasInlineValue && !isBoolFlag {
+			// next arg is supposed to be the flag value
 			if i+1 < len(args) {
-				stripped = append(stripped, args[i+1])
+				*appendTo = append(*appendTo, args[i+1])
 			}
-			i++ // strip next arg (current flag value)
+			i++ // skip the flag value
 		}
 	}
 	return res, stripped

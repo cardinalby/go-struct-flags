@@ -82,6 +82,18 @@ func TestStripUnknownFlags(t *testing.T) {
 			expected: []string{"-s", "some", "--", "-b"},
 			stripped: nil,
 		},
+		{
+			name:     "double-dashed value of known flag",
+			args:     []string{"-s", "--unk"},
+			expected: []string{"-s", "--unk"},
+			stripped: nil,
+		},
+		{
+			name:     "double-dashed value of known flag with the following flags",
+			args:     []string{"-s", "--unk", "-b", "--unk2"},
+			expected: []string{"-s", "--unk", "-b"},
+			stripped: []string{"--unk2"},
+		},
 	}
 
 	fs := flag.NewFlagSet("", flag.ContinueOnError)
