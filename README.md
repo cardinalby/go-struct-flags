@@ -1,5 +1,6 @@
 [![test](https://github.com/cardinalby/go-struct-flags/actions/workflows/test.yml/badge.svg)](https://github.com/cardinalby/go-struct-flags/actions/workflows/test.yml)
 [![list](https://github.com/cardinalby/go-struct-flags/actions/workflows/list.yml/badge.svg)](https://github.com/cardinalby/go-struct-flags/actions/workflows/list.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/cardinalby/go-struct-flags.svg)](https://pkg.go.dev/github.com/cardinalby/go-struct-flags)
 
 # Parse command line flags into a struct with tags
 
