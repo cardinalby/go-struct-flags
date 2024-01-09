@@ -15,6 +15,10 @@ to parse command line flags into a struct fields
 
 ## Example
 
+```shell
+go get github.com/cardinalby/go-struct-flags
+```
+
 ### Define your flags struct with tags:
 ```go
 import (
@@ -131,12 +135,18 @@ if err := flagSet.Parse([]string{
 
 See tests for more examples.
 
+## Constructing
+The library provides two constructors: 
+- `Wrap(*flag.FlagSet)` that wraps the existing std `flag.FlagSet` instance that can have some flags already registered
+or be used to register new flags using its methods.
+- `NewFlagSet()` creates new `flag.FlagSet` instance and sets its `Usage` to [`flago.DefaultUsage`](#usage-help-message)
+
 ## Configure `Parse()` behavior
 
-### Ignore unknown flags
+### 🔹 Ignore unknown flags
 `SetIgnoreUnknown(true)` method call will make `Parse()` ignore unknown flags instead of returning an error.
 
-### Allow parsing multiple aliases
+### 🔹 Allow parsing multiple aliases
 `SetAllowParsingMultipleAliases(true)` method call will make `Parse()` not return an error if multiple aliases
 of the same field are passed. The last passed value will be used.
 
@@ -204,12 +214,10 @@ You can do it manually: `flagSet.Usage = flago.DefaultUsage`
 
 ### Field types support
 
-`StructVar()` method parses fields and their tags and calls the correspondent `FlagSet.***Var()` methods
+- `StructVar()` method parses fields and their tags and calls the correspondent `FlagSet.***Var()` methods
 depending on the field type. 
-
-So fields should have types supported by `flag` package or be pointers to such types.
-
-Fields  implementing `flag.Value` and `func(string) error` fields are also supported (but can't be pointers).
+- So fields should have types supported by `flag` package or be pointers to such types.
+- Fields  implementing `flag.Value` and `func(string) error` fields are also supported (but can't be pointers).
 
 #### Special case
 If a field has `encoding.TextUnmarshaler` interface, it also should implement `encoding.TextMarshaler`.
