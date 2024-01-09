@@ -3,7 +3,7 @@ name: list
 on:
   push:
     tags:
-      - "*.*.*"
+      - "v*.*.*"
   workflow_dispatch:
 jobs:
   list:
