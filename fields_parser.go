@@ -3,6 +3,7 @@ package flago
 import (
 	"fmt"
 	"reflect"
+	"unsafe"
 )
 
 // fieldInfo contains info about a struct field that should be handled by FlagSet
@@ -21,9 +22,15 @@ func collectFieldsInfoRecursive(
 	parentFlagPrefix string,
 	parentUsagePrefix string,
 	parentFieldName string,
+	ignoredFields map[unsafe.Pointer]struct{},
 ) (res []fieldInfo, err error) {
 	sValType := structValue.Type()
 	for i := 0; i < structValue.NumField(); i++ {
+		fieldVal := structValue.Field(i)
+		if _, isIgnored := ignoredFields[fieldVal.Addr().UnsafePointer()]; isIgnored {
+			continue
+		}
+
 		field := sValType.Field(i)
 		fieldName := getFieldName(parentFieldName, field.Name)
 		fieldRole, err := getFieldRole(field)
@@ -35,11 +42,12 @@ func collectFieldsInfoRecursive(
 		}
 		if fieldInfo, err := collectFieldInfo(
 			field,
-			structValue.Field(i),
+			fieldVal,
 			fieldName,
 			parentFlagPrefix,
 			parentUsagePrefix,
 			fieldRole,
+			ignoredFields,
 		); err != nil {
 			return nil, err
 		} else {
@@ -56,6 +64,7 @@ func collectFieldInfo(
 	parentFlagPrefix string,
 	parentUsagePrefix string,
 	fieldRole fieldRole,
+	ignoredFields map[unsafe.Pointer]struct{},
 ) (res []fieldInfo, err error) {
 	defer func() {
 		if err != nil {
@@ -74,6 +83,7 @@ func collectFieldInfo(
 			parentFlagPrefix+role.flagPrefix,
 			parentUsagePrefix+role.usagePrefix,
 			fieldName,
+			ignoredFields,
 		); err != nil {
 			return nil, err
 		} else {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"unsafe"
 )
 
 type registeredNamedFlagField struct {
@@ -116,13 +117,15 @@ func (fls *FlagSet) Parse(arguments []string) error {
 }
 
 // StructVar registers the fields of the given struct as a flags
-func (fls *FlagSet) StructVar(p any) error {
-	return fls.StructVarWithPrefix(p, "")
+// `ignoredFields` is a slice of pointers to fields that should be ignored and not registered as flags
+func (fls *FlagSet) StructVar(p any, ignoredFields ...any) error {
+	return fls.StructVarWithPrefix(p, "", ignoredFields...)
 }
 
 // StructVarWithPrefix registers the fields of the given struct as a flags
 // with names prefixed with `flagsPrefix`
-func (fls *FlagSet) StructVarWithPrefix(p any, flagsPrefix string) error {
+// `ignoredFields` is a slice of pointers to fields that should be ignored and not registered as flags
+func (fls *FlagSet) StructVarWithPrefix(p any, flagsPrefix string, ignoredFields ...any) error {
 	if fls.FlagSet == nil {
 		return errors.New("wrapped FlagSet is nil")
 	}
@@ -130,9 +133,19 @@ func (fls *FlagSet) StructVarWithPrefix(p any, flagsPrefix string) error {
 	if err != nil {
 		return err
 	}
+	ignoredFieldsMap, err := newIgnoredFieldsMap(ignoredFields)
+	if err != nil {
+		return fmt.Errorf("invalid ignoredFields: %w", err)
+	}
 
 	// collect fields info but don't register flags until all fields are validated
-	fieldsInfo, err := collectFieldsInfoRecursive(structValue, flagsPrefix, "", "")
+	fieldsInfo, err := collectFieldsInfoRecursive(
+		structValue,
+		flagsPrefix,
+		"",
+		"",
+		ignoredFieldsMap,
+	)
 	if err != nil {
 		return err
 	}
@@ -227,6 +240,18 @@ func getStructPointerElem(p any) (res reflect.Value, err error) {
 	res = reflect.ValueOf(p).Elem()
 	if res.Kind() != reflect.Struct {
 		return reflect.Value{}, fmt.Errorf("expected struct, got %v", val.Type().Name())
+	}
+	return res, nil
+}
+
+func newIgnoredFieldsMap(fields []any) (map[unsafe.Pointer]struct{}, error) {
+	res := make(map[unsafe.Pointer]struct{})
+	for i, field := range fields {
+		val := reflect.ValueOf(field)
+		if val.Kind() != reflect.Ptr {
+			return nil, fmt.Errorf(`element %d: pointer expected, got %s`, i, val.Type().Name())
+		}
+		res[val.UnsafePointer()] = struct{}{}
 	}
 	return res, nil
 }

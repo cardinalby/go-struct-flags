@@ -216,6 +216,23 @@ func TestNoTaggedFields(t *testing.T) {
 	require.Empty(t, structVal.Int)
 }
 
+func TestIgnoredFields(t *testing.T) {
+	type s struct {
+		Int int    `flag:"i"`
+		Str string `flag:"s"`
+	}
+	fls := NewFlagSet("", flag.ContinueOnError)
+	structVal := s{}
+	require.NoError(t, fls.StructVarWithPrefix(&structVal, "", &structVal.Int))
+	require.Error(t, fls.Parse([]string{"--i=2", "--s=abc"}))
+
+	fls.SetIgnoreUnknown(true)
+	require.NoError(t, fls.Parse([]string{"--i=3", "--s=def"}))
+	require.Equal(t, 0, structVal.Int)
+	require.Equal(t, "def", structVal.Str)
+	require.ElementsMatch(t, []string{"--i=3"}, fls.GetIgnoredArgs())
+}
+
 func TestInvalidFieldType(t *testing.T) {
 	type invalidStruct struct {
 		Time time.Time `flag:"t" flagUsage:"usage1"`

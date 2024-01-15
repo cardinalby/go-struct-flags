@@ -155,7 +155,9 @@ To retrieve unknown flags that have been ignored, call `GetIgnoredArgs()` after 
 of the same field are passed. The last passed value will be used.
 
 # Supported struct tags
-To parse flags and args to struct fields you should use `StructVar()` method.
+To parse flags and args to struct fields you should use `StructVar()` or `StructVarWithPrefix()` methods.
+
+The methods accept optional arguments of pointers to ignored fields. These fields will not be registered as flags.
 
 The struct fields that don't have any "flag" tags will be ignored. 
 

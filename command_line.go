@@ -22,16 +22,18 @@ func commandLineUsage() {
 }
 
 // StructVar registers the given struct with the default FlagSet
+// `ignoredFields` is a slice of pointers to fields that should be ignored and not registered as flags
 // See FlagSet.StructVar
-func StructVar(p any) error {
-	return CommandLine.StructVar(p)
+func StructVar(p any, ignoredFields ...any) error {
+	return CommandLine.StructVar(p, ignoredFields...)
 }
 
 // StructVarWithPrefix registers the given struct with the default FlagSet using
 // the given prefix for flag names.
+// `ignoredFields` is a slice of pointers to fields that should be ignored and not registered as flags
 // See FlagSet.StructVarWithPrefix
-func StructVarWithPrefix(p any, flagsPrefix string) error {
-	return CommandLine.StructVarWithPrefix(p, flagsPrefix)
+func StructVarWithPrefix(p any, flagsPrefix string, ignoredFields ...any) error {
+	return CommandLine.StructVarWithPrefix(p, flagsPrefix, ignoredFields...)
 }
 
 // SetAllowParsingMultipleAliases sets the behavior of Parse() when multiple tag names
