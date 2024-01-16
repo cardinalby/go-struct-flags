@@ -9,6 +9,7 @@ import (
 
 const (
 	flagNameTag     = "flag"
+	flagRequiredTag = "flagRequired"
 	flagNamesTag    = "flags"
 	flagArgsTag     = "flagArgs"
 	flagUsageTag    = "flagUsage"
@@ -25,6 +26,7 @@ type namedFlagRole struct {
 	varRegister varRegister
 	usage       string
 	roleTagName string
+	isRequired  bool
 }
 
 func (r namedFlagRole) getRoleTagName() string {
@@ -59,12 +61,14 @@ func (r nestedStructRole) getRoleTagName() string {
 
 func getFieldRole(field reflect.StructField) (fieldRole, error) {
 	var (
-		flagName      string
-		flagNames     []string
-		flagArgs      bool
-		flagPrefix    string
-		hasFlagPrefix bool
-		err           error
+		flagName        string
+		flagNames       []string
+		flagArgs        bool
+		flagRequired    bool
+		hasFlagRequired bool
+		flagPrefix      string
+		hasFlagPrefix   bool
+		err             error
 	)
 	tags := field.Tag
 
@@ -73,7 +77,10 @@ func getFieldRole(field reflect.StructField) (fieldRole, error) {
 	}
 	flagNames = getFlagNames(tags)
 
-	if flagArgs, err = getIsFlagArgs(tags); err != nil {
+	if flagArgs, _, err = getBoolTag(tags, flagArgsTag); err != nil {
+		return nil, err
+	}
+	if flagRequired, hasFlagRequired, err = getBoolTag(tags, flagRequiredTag); err != nil {
 		return nil, err
 	}
 
@@ -107,7 +114,8 @@ func getFieldRole(field reflect.StructField) (fieldRole, error) {
 
 	if hasFlagName || hasFlagNames {
 		role := namedFlagRole{
-			usage: usage,
+			usage:      usage,
+			isRequired: flagRequired,
 		}
 		if hasFlagName {
 			role.flagNames = []string{flagName}
@@ -119,11 +127,16 @@ func getFieldRole(field reflect.StructField) (fieldRole, error) {
 		return role, nil
 	}
 
-	if hasUsage {
-		return nil, fmt.Errorf(
-			`"%s" tag can be used only with "%s" or "%s" tags`,
-			flagUsageTag, flagNameTag, flagNamesTag,
-		)
+	for tagName, hasTag := range map[string]bool{
+		flagUsageTag:    hasUsage,
+		flagRequiredTag: hasFlagRequired,
+	} {
+		if hasTag {
+			return nil, fmt.Errorf(
+				`"%s" tag can be used only with "%s" or "%s" tags`,
+				tagName, flagNameTag, flagNamesTag,
+			)
+		}
 	}
 
 	if hasFlagPrefix {
@@ -141,14 +154,15 @@ func getFieldRole(field reflect.StructField) (fieldRole, error) {
 	return nil, nil
 }
 
-func getIsFlagArgs(tags reflect.StructTag) (isFlagArgs bool, err error) {
-	if flagArgs := tags.Get(flagArgsTag); flagArgs != "" {
-		if isFlagArgs, err = strconv.ParseBool(flagArgs); err != nil {
-			return false,
-				fmt.Errorf(`invalid "%s" tag bool value: "%s"`, flagArgsTag, flagArgs)
+func getBoolTag(tags reflect.StructTag, tagName string) (val bool, exists bool, err error) {
+	var strVal string
+	if strVal, exists = tags.Lookup(tagName); strVal != "" {
+		if val, err = strconv.ParseBool(strVal); err != nil {
+			return false, exists,
+				fmt.Errorf(`invalid "%s" tag bool value: "%s"`, tagName, strVal)
 		}
 	}
-	return isFlagArgs, nil
+	return val, exists, nil
 }
 
 func getFlagNames(tags reflect.StructTag) []string {

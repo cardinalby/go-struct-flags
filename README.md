@@ -154,6 +154,8 @@ To retrieve unknown flags that have been ignored, call `GetIgnoredArgs()` after 
 `SetAllowParsingMultipleAliases(true)` method call will make `Parse()` not return an error if multiple aliases
 of the same field are passed. The last passed value will be used.
 
+Default behavior is to return an error containing `flago.ErrMultipleAliases`.
+
 # Supported struct tags
 To parse flags and args to struct fields you should use `StructVar()` or `StructVarWithPrefix()` methods.
 
@@ -175,12 +177,17 @@ Defines flag name for a field. Unlike `json` package, if the name is not set, th
 Same as `flag` but defines multiple comma-separated flag names (aliases) for a field.
 
 - You should use either `flag` or `flags` tag for a field, not both.
-- By default, `Parse()` will return an **error** if **multiple aliases** of the same field are passed. You can 
-change this behavior using `SetAllowParsingMultipleAliases(true)`
+- By default, `Parse()` will return an **error** containing `flago.ErrMultipleAliases` if **multiple aliases** of 
+the same field are passed. You can change this behavior using `SetAllowParsingMultipleAliases(true)`
 
 ### 🔸 `flagUsage="message"`
 
 Defines flag usage message for a field. Should be used only for fields with `flag` or `flags` tag.
+
+### 🔸 `flagRequired="true"`
+
+Defines that the field is required and `Parse()` will return an **error** containing `flago.ErrIsRequired` 
+if the flag is not passed.
 
 ## Assign remaining args
 

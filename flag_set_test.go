@@ -366,13 +366,26 @@ func TestErrorOnMultipleAliasesNames(t *testing.T) {
 	output := captureOutput(fls, func() {
 		parseErr = fls.Parse([]string{"--i1", "1", "--i2", "2"})
 	})
-	expectedErrorMsg := `either "i1" or "i2" flag should be used but not both`
+	expectedErrorMsg := `multiple aliases for the same flag are used: "i1" and "i2"`
 	require.ErrorContains(t, parseErr, expectedErrorMsg)
+	require.ErrorIs(t, parseErr, ErrMultipleAliases)
 	expectedUsage := "Usage:\n  -i1 -i2 int\n    \t\n"
 
 	expectedOutput := expectedErrorMsg + "\n" + expectedUsage
 
 	require.Equal(t, expectedOutput, output)
+}
+
+func TestOverlappingTagNames(t *testing.T) {
+	type testStruct struct {
+		Int int    `flags:"i"`
+		Str string `flag:"i"`
+	}
+	fls := NewFlagSet("", flag.ContinueOnError)
+	structVal := testStruct{
+		Int: 2,
+	}
+	require.ErrorIs(t, fls.StructVarWithPrefix(&structVal, ""), ErrFlagRedefined)
 }
 
 func TestIgnoreUnknownTags(t *testing.T) {
@@ -390,6 +403,33 @@ func TestIgnoreUnknownTags(t *testing.T) {
 	require.Equal(t, "abc", structVal.Str)
 	require.ElementsMatch(t, []string{"def"}, structVal.A)
 	require.ElementsMatch(t, []string{"--unknown", "2"}, fls.GetIgnoredArgs())
+}
+
+func TestRequiredFlag(t *testing.T) {
+	type testStruct struct {
+		Int int    `flags:"i,i2" flagRequired:"true"`
+		Str string `flag:"s"`
+	}
+	fls := NewFlagSet("", flag.ContinueOnError)
+	structVal := testStruct{
+		Int: 2,
+	}
+	require.NoError(t, fls.StructVarWithPrefix(&structVal, ""))
+	require.ErrorIs(t, fls.Parse([]string{"--s", "abc"}), ErrIsRequired)
+	require.Equal(t, 2, structVal.Int)
+	require.Equal(t, "abc", structVal.Str)
+}
+
+func TestMissingRequiredFlag(t *testing.T) {
+	type testStruct struct {
+		Int int    `flags:"i,i2" flagRequired:"true"`
+		Str string `flag:"s"`
+	}
+	fls := NewFlagSet("", flag.ContinueOnError)
+	structVal := testStruct{}
+	require.NoError(t, fls.StructVarWithPrefix(&structVal, ""))
+	require.NoError(t, fls.Parse([]string{"--i", "1"}))
+	require.Equal(t, 1, structVal.Int)
 }
 
 type testNestedStruct struct {

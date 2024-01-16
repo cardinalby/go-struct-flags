@@ -6,26 +6,36 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"strings"
 	"unsafe"
 )
+
+var ErrFlagRedefined = errors.New("flag redefined")
+var ErrIsRequired = errors.New("flag is required")
+var ErrMultipleAliases = errors.New("multiple aliases for the same flag are used")
 
 type registeredNamedFlagField struct {
 	flagName     string
 	postParseClb postParseClb
 }
 
+type registeredNamedFlagsField struct {
+	fields     []registeredNamedFlagField
+	isRequired bool
+}
+
 // structRegisteredFields contains instruction for finishing parsing of a struct
 // after all flags are parsed.
 type structRegisteredFields struct {
 	// keys: field names, values: slice where each element corresponds to a registered flag (with different names)
-	namedFlagFields map[string][]registeredNamedFlagField
+	namedFlagFields map[string]registeredNamedFlagsField
 	// keys: field names, values: field values that should be assigned with FlagSet.Args()
 	flagArgsToSet map[string]reflect.Value
 }
 
 func newStructRegisteredFields() structRegisteredFields {
 	return structRegisteredFields{
-		namedFlagFields: make(map[string][]registeredNamedFlagField),
+		namedFlagFields: make(map[string]registeredNamedFlagsField),
 		flagArgsToSet:   make(map[string]reflect.Value),
 	}
 }
@@ -125,7 +135,11 @@ func (fls *FlagSet) StructVar(p any, ignoredFields ...any) error {
 // StructVarWithPrefix registers the fields of the given struct as a flags
 // with names prefixed with `flagsPrefix`
 // `ignoredFields` is a slice of pointers to fields that should be ignored and not registered as flags
-func (fls *FlagSet) StructVarWithPrefix(p any, flagsPrefix string, ignoredFields ...any) error {
+func (fls *FlagSet) StructVarWithPrefix(p any, flagsPrefix string, ignoredFields ...any) (err error) {
+	defer func() {
+		err = fls.recoverParsePanic(recover(), err)
+	}()
+
 	if fls.FlagSet == nil {
 		return errors.New("wrapped FlagSet is nil")
 	}
@@ -171,33 +185,50 @@ func (fls *FlagSet) PrintDefaults() {
 
 func (fls *FlagSet) postProcessRegisteredFields() error {
 	existingFlagNames := getExistingFlagNames(fls.FlagSet)
+	var errs []error
 
 	for _, structFields := range fls.registeredFields {
-		for _, namedFlagFields := range structFields.namedFlagFields {
+		for _, namedFlagsField := range structFields.namedFlagFields {
 			var fieldFirstFoundFlagName string
-
-			for _, namedFlagField := range namedFlagFields {
-				if _, exists := existingFlagNames[namedFlagField.flagName]; exists {
-					if !fls.allowParsingMultipleAliases {
-						if fieldFirstFoundFlagName == "" {
-							fieldFirstFoundFlagName = namedFlagField.flagName
-						} else if fieldFirstFoundFlagName != namedFlagField.flagName {
-							return fmt.Errorf(
-								`either "%s" or "%s" flag should be used but not both`,
-								fieldFirstFoundFlagName,
-								namedFlagField.flagName,
-							)
-						}
-					}
-					if namedFlagField.postParseClb != nil {
-						namedFlagField.postParseClb()
+			isAnyFieldFlagFound := false
+			for _, namedFlagField := range namedFlagsField.fields {
+				if _, exists := existingFlagNames[namedFlagField.flagName]; !exists {
+					continue
+				}
+				isAnyFieldFlagFound = true
+				if !fls.allowParsingMultipleAliases {
+					if fieldFirstFoundFlagName == "" {
+						fieldFirstFoundFlagName = namedFlagField.flagName
+					} else if fieldFirstFoundFlagName != namedFlagField.flagName {
+						errs = append(errs, fmt.Errorf(
+							`%w: "%s" and "%s"`,
+							ErrMultipleAliases,
+							fieldFirstFoundFlagName,
+							namedFlagField.flagName,
+						))
+						continue
 					}
 				}
+				if len(errs) == 0 && namedFlagField.postParseClb != nil {
+					namedFlagField.postParseClb()
+				}
+			}
+			if namedFlagsField.isRequired && !isAnyFieldFlagFound {
+				names := make([]string, len(namedFlagsField.fields))
+				for i, namedFlagField := range namedFlagsField.fields {
+					names[i] = namedFlagField.flagName
+				}
+				errs = append(errs, fmt.Errorf(`%w: "%s"`, ErrIsRequired, strings.Join(names, `"/"`)))
 			}
 		}
-		for _, fieldValue := range structFields.flagArgsToSet {
-			fieldValue.Set(reflect.ValueOf(fls.FlagSet.Args()))
+		if len(errs) == 0 {
+			for _, fieldValue := range structFields.flagArgsToSet {
+				fieldValue.Set(reflect.ValueOf(fls.FlagSet.Args()))
+			}
 		}
+	}
+	if len(errs) > 0 {
+		return joinErr(errs...)
 	}
 	return nil
 }
@@ -222,14 +253,29 @@ func (fls *FlagSet) sprintf(format string, a ...any) string {
 	return msg
 }
 
-func (fls *FlagSet) registerNamedFlagField(info fieldInfo) (res []registeredNamedFlagField) {
+func (fls *FlagSet) registerNamedFlagField(info fieldInfo) (res registeredNamedFlagsField) {
+	res.isRequired = info.namedFlagRole.isRequired
 	for _, flagName := range info.namedFlagRole.flagNames {
-		res = append(res, registeredNamedFlagField{
+		res.fields = append(res.fields, registeredNamedFlagField{
 			flagName:     flagName,
 			postParseClb: info.namedFlagRole.varRegister(fls.FlagSet, flagName, info.namedFlagRole.usage),
 		})
 	}
 	return res
+}
+
+func (fls *FlagSet) recoverParsePanic(panicMsg any, existingErr error) error {
+	if panicMsg == nil {
+		return existingErr
+	}
+	var panicErr error
+	panicStrMsg, isStr := panicMsg.(string)
+	if isStr && strings.HasPrefix(panicStrMsg, "flag redefined") {
+		panicErr = ErrFlagRedefined
+	} else {
+		panicErr = fmt.Errorf("%v", panicErr)
+	}
+	return joinErr(existingErr, panicErr)
 }
 
 func getStructPointerElem(p any) (res reflect.Value, err error) {
