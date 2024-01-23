@@ -217,20 +217,38 @@ func TestNoTaggedFields(t *testing.T) {
 }
 
 func TestIgnoredFields(t *testing.T) {
-	type s struct {
-		Int int    `flag:"i"`
-		Str string `flag:"s"`
+	type nested struct {
+		N string `flag:"n"`
 	}
-	fls := NewFlagSet("", flag.ContinueOnError)
-	structVal := s{}
-	require.NoError(t, fls.StructVarWithPrefix(&structVal, "", &structVal.Int))
-	require.Error(t, fls.Parse([]string{"--i=2", "--s=abc"}))
+	type s struct {
+		Int  int      `flag:"i"`
+		Bool bool     `flag:"b"`
+		Str  string   `flag:"s"`
+		Args []string `flagArgs:"true"`
+		X    nested   `flagPrefix:"x-"`
+	}
 
-	fls.SetIgnoreUnknown(true)
-	require.NoError(t, fls.Parse([]string{"--i=3", "--s=def"}))
-	require.Equal(t, 0, structVal.Int)
-	require.Equal(t, "def", structVal.Str)
-	require.ElementsMatch(t, []string{"--i=3"}, fls.GetIgnoredArgs())
+	t.Run("error", func(t *testing.T) {
+		fls := NewFlagSet("", flag.ContinueOnError)
+		structVal := s{}
+		require.NoError(t, fls.StructVarWithPrefix(&structVal, "", &structVal.Int, &structVal.Bool))
+		require.Error(t, fls.Parse([]string{"--s=def", "-b"}))
+	})
+
+	t.Run("ignore", func(t *testing.T) {
+		fls := NewFlagSet("", flag.ContinueOnError)
+		structVal := s{}
+		require.NoError(t, fls.StructVarWithPrefix(&structVal, "", &structVal.Int, &structVal.X))
+
+		fls.SetIgnoreUnknown(true)
+		require.NoError(t, fls.Parse([]string{"--s=def", "-b", "-x-n=abc", "--i", "3"}))
+		require.Equal(t, 0, structVal.Int)
+		require.Equal(t, "def", structVal.Str)
+		require.Equal(t, "", structVal.X.N)
+		require.True(t, structVal.Bool)
+		require.ElementsMatch(t, []string{"-x-n=abc", "--i", "3"}, fls.GetIgnoredArgs())
+		require.ElementsMatch(t, nil, structVal.Args)
+	})
 }
 
 func TestInvalidFieldType(t *testing.T) {
@@ -394,15 +412,31 @@ func TestIgnoreUnknownTags(t *testing.T) {
 		Str string   `flag:"s"`
 		A   []string `flagArgs:"true"`
 	}
-	fls := NewFlagSet("", flag.ContinueOnError)
-	structVal := testStruct{}
-	require.NoError(t, fls.StructVarWithPrefix(&structVal, ""))
-	fls.SetIgnoreUnknown(true)
-	require.NoError(t, fls.Parse([]string{"--i", "1", "--unknown", "2", "--s=abc", "def"}))
-	require.Equal(t, 1, structVal.Int)
-	require.Equal(t, "abc", structVal.Str)
-	require.ElementsMatch(t, []string{"def"}, structVal.A)
-	require.ElementsMatch(t, []string{"--unknown", "2"}, fls.GetIgnoredArgs())
+
+	t.Run("ambiguous_as_bool", func(t *testing.T) {
+		fls := NewFlagSet("", flag.ContinueOnError)
+		structVal := testStruct{}
+		require.NoError(t, fls.StructVarWithPrefix(&structVal, ""))
+		fls.SetIgnoreUnknown(true)
+		fls.SetIgnoreUnknownAmbiguousAsBoolFlags(true)
+		require.NoError(t, fls.Parse([]string{"--i", "1", "--s=abc", "--unknown", "2", "def"}))
+		require.Equal(t, 1, structVal.Int)
+		require.Equal(t, "abc", structVal.Str)
+		require.ElementsMatch(t, []string{"2", "def"}, structVal.A)
+		require.ElementsMatch(t, []string{"--unknown"}, fls.GetIgnoredArgs())
+	})
+
+	t.Run("ambiguous_as_not_bool", func(t *testing.T) {
+		fls := NewFlagSet("", flag.ContinueOnError)
+		structVal := testStruct{}
+		require.NoError(t, fls.StructVarWithPrefix(&structVal, ""))
+		fls.SetIgnoreUnknown(true)
+		require.NoError(t, fls.Parse([]string{"--i", "1", "--s=abc", "--unknown", "2", "def"}))
+		require.Equal(t, 1, structVal.Int)
+		require.Equal(t, "abc", structVal.Str)
+		require.ElementsMatch(t, []string{"def"}, structVal.A)
+		require.ElementsMatch(t, []string{"--unknown", "2"}, fls.GetIgnoredArgs())
+	})
 }
 
 func TestRequiredFlag(t *testing.T) {

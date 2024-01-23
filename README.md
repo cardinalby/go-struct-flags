@@ -150,6 +150,9 @@ FlagSet instance are available in the same manner as in the standard `flag` pack
 
 To retrieve unknown flags that have been ignored, call `GetIgnoredArgs()` after `Parse()`.
 
+With unknown flags it's not always clear how to treat them: as bool flags or as flags with the following values.
+See docs for `SetIgnoreUnknownAmbiguousAsBoolFlags(...)` for details.
+
 ### 🔹 Allow parsing multiple aliases
 `SetAllowParsingMultipleAliases(true)` method call will make `Parse()` not return an error if multiple aliases
 of the same field are passed. The last passed value will be used.

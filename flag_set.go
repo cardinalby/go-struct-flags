@@ -8,6 +8,8 @@ import (
 	"reflect"
 	"strings"
 	"unsafe"
+
+	"github.com/cardinalby/go-struct-flags/stdutil"
 )
 
 var ErrFlagRedefined = errors.New("flag redefined")
@@ -45,10 +47,11 @@ type FlagSet struct {
 	*flag.FlagSet
 	// registeredFields contains instructions for finishing parsing of the registered structs
 	// key is a pointer to a struct
-	registeredFields            map[any]structRegisteredFields
-	ignoreUnknown               bool
-	allowParsingMultipleAliases bool
-	ignoredArgs                 []string
+	registeredFields                  map[any]structRegisteredFields
+	ignoreUnknown                     bool
+	ignoreUnknownTreatAmbiguousAsBool bool
+	allowParsingMultipleAliases       bool
+	ignoredArgs                       []string
 }
 
 // Wrap creates a new FlagSet wrapping the given `stdFlagSet` and does not set stdFlagSet.Usage
@@ -86,6 +89,19 @@ func (fls *FlagSet) SetIgnoreUnknown(ignore bool) {
 	fls.ignoreUnknown = ignore
 }
 
+// SetIgnoreUnknownAmbiguousAsBoolFlags specifies behaviour of stripping ambiguous unknown flags if
+// SetIgnoreUnknown(true) is set.
+// Unknown flag without inline value can be treated as bool flag or as flag name that should be followed by value.
+// If the flag is unknown, we can't know if it's bool flag or not.
+// Example: "-a -b" can be treated as:
+// 1. {a: "-b"} - id - if treatAsBool == false
+// OR
+// 2. {a: true, b: true} - if treatAsBool == true
+// Default values is `false`.
+func (fls *FlagSet) SetIgnoreUnknownAmbiguousAsBoolFlags(treatAsBool bool) {
+	fls.ignoreUnknownTreatAmbiguousAsBool = treatAsBool
+}
+
 // GetIgnoredArgs returns a slice of arguments that were ignored during the last call to Parse()
 // because of SetIgnoreUnknown(true), nil otherwise
 func (fls *FlagSet) GetIgnoredArgs() []string {
@@ -100,7 +116,7 @@ func (fls *FlagSet) Parse(arguments []string) error {
 	}
 	fls.ignoredArgs = nil
 	if fls.ignoreUnknown {
-		arguments, fls.ignoredArgs = StripUnknownFlags(fls.FlagSet, arguments)
+		arguments, fls.ignoredArgs = StripUnknownFlags(fls.FlagSet, arguments, fls.ignoreUnknownTreatAmbiguousAsBool)
 	}
 	if err := fls.FlagSet.Parse(arguments); err != nil {
 		return err
@@ -184,7 +200,7 @@ func (fls *FlagSet) PrintDefaults() {
 }
 
 func (fls *FlagSet) postProcessRegisteredFields() error {
-	existingFlagNames := getExistingFlagNames(fls.FlagSet)
+	existingFlagNames := stdutil.GetExistingFlagNames(fls.FlagSet)
 	var errs []error
 
 	for _, structFields := range fls.registeredFields {
