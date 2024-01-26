@@ -53,6 +53,15 @@ func SetIgnoreUnknown(ignore bool) {
 	CommandLine.SetIgnoreUnknown(ignore)
 }
 
+// SetIgnoreUnknownAmbiguousAsBoolFlags sets the behavior of Parse() when unknown flags are passed,
+// and they are ambiguous with known bool flags.
+// If `true`, they will be treated as bool flags.
+// If `false`, Parse() will return an error.
+// Default value is `false`.
+func SetIgnoreUnknownAmbiguousAsBoolFlags(treatAsBool bool) {
+	CommandLine.SetIgnoreUnknownAmbiguousAsBoolFlags(treatAsBool)
+}
+
 // GetIgnoredArgs returns a slice of arguments that were ignored during the last call to Parse()
 // because of SetIgnoreUnknown(true), nil otherwise
 func GetIgnoredArgs() []string {

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"reflect"
 	"unsafe"
+
+	"github.com/cardinalby/go-struct-flags/stdutil"
 )
 
 // fieldInfo contains info about a struct field that should be handled by FlagSet
@@ -23,13 +25,12 @@ func collectFieldsInfoRecursive(
 	parentUsagePrefix string,
 	parentFieldName string,
 	ignoredFields map[unsafe.Pointer]struct{},
+	flagsToIgnore stdutil.FormalTagNames, // to be filled
 ) (res []fieldInfo, err error) {
 	sValType := structValue.Type()
 	for i := 0; i < structValue.NumField(); i++ {
 		fieldVal := structValue.Field(i)
-		if _, isIgnored := ignoredFields[fieldVal.Addr().UnsafePointer()]; isIgnored {
-			continue
-		}
+		_, isIgnored := ignoredFields[fieldVal.Addr().UnsafePointer()]
 
 		field := sValType.Field(i)
 		fieldName := getFieldName(parentFieldName, field.Name)
@@ -48,6 +49,8 @@ func collectFieldsInfoRecursive(
 			parentUsagePrefix,
 			fieldRole,
 			ignoredFields,
+			flagsToIgnore,
+			isIgnored,
 		); err != nil {
 			return nil, err
 		} else {
@@ -65,6 +68,8 @@ func collectFieldInfo(
 	parentUsagePrefix string,
 	fieldRole fieldRole,
 	ignoredFields map[unsafe.Pointer]struct{},
+	flagsToIgnore stdutil.FormalTagNames,
+	isIgnored bool,
 ) (res []fieldInfo, err error) {
 	defer func() {
 		if err != nil {
@@ -84,6 +89,7 @@ func collectFieldInfo(
 			parentUsagePrefix+role.usagePrefix,
 			fieldName,
 			ignoredFields,
+			flagsToIgnore,
 		); err != nil {
 			return nil, err
 		} else {
@@ -99,11 +105,21 @@ func collectFieldInfo(
 			fieldValue: fieldValue,
 		})
 	case namedFlagRole:
+		role = role.withPrefixes(parentFlagPrefix, parentUsagePrefix)
+		if isIgnored {
+			for _, flagName := range role.flagNames {
+				if _, has := flagsToIgnore[flagName]; has {
+					return nil, fmt.Errorf(`%w: "%s"`, ErrFlagRedefined, flagName)
+				}
+				flagsToIgnore[flagName] = isBoolFlagField(fieldValue)
+			}
+			return nil, nil
+		}
 		varRegister, err := getVarRegister(fieldValue)
 		if err != nil {
 			return nil, err
 		}
-		role = role.withPrefixes(parentFlagPrefix, parentUsagePrefix)
+
 		role.varRegister = varRegister
 		res = append(res, fieldInfo{
 			fieldName:     fieldName,
@@ -133,4 +149,14 @@ func getFieldName(parentFieldName, fieldName string) string {
 		return fieldName
 	}
 	return fmt.Sprintf("%s.%s", parentFieldName, fieldName)
+}
+
+func isBoolFlagField(value reflect.Value) bool {
+	if value.Type().Kind() == reflect.Bool {
+		return true
+	}
+	if value.Type().Kind() == reflect.Ptr {
+		return value.Type().Elem().Kind() == reflect.Bool
+	}
+	return false
 }

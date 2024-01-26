@@ -17,8 +17,8 @@ func printUsageTitle(flagSet *flag.FlagSet, name string) {
 }
 
 // DefaultUsage prints the default FlagSet usage to flagSet.Output grouping alternative flag names
-func DefaultUsage(flagSet *flag.FlagSet) {
-	printUsageTitle(flagSet, flagSet.Name())
+func DefaultUsage(flagSet *FlagSet) {
+	printUsageTitle(flagSet.FlagSet, flagSet.Name())
 	PrintFlagSetDefaults(flagSet)
 }
 
@@ -43,18 +43,22 @@ func (w *mutatorWriter) Write(p []byte) (n int, err error) {
 }
 
 type flagNames struct {
-	f     *flag.Flag
-	names []string
+	f          *flag.Flag
+	isRequired bool
+	names      []string
 }
 
 // indexFormalFlagNames returns a map of flag names to flag names grouped by flag value
-func indexFormalFlagNames(flagSet *flag.FlagSet) map[string]*flagNames {
+func indexFormalFlagNames(flagSet *FlagSet) map[string]*flagNames {
 	namesByValue := make(map[flag.Value]*flagNames)
 	flagSet.VisitAll(func(f *flag.Flag) {
 		fNames, ok := namesByValue[f.Value]
 		if !ok {
 			fNames = &flagNames{
 				f: f,
+			}
+			if _, isRequired := flagSet.requiredFlagNames[f.Name]; isRequired {
+				fNames.isRequired = true
 			}
 			namesByValue[f.Value] = fNames
 		}
@@ -87,8 +91,12 @@ func replaceDefaultsOutputItemName(outputItem, newName string) string {
 	return s
 }
 
+func addDefaultsRequiredMark(outputItem string) string {
+	return strings.Replace(outputItem, "\t", "\t* ", 1)
+}
+
 // PrintFlagSetDefaults prints flag names and usage grouping alternative flag names
-func PrintFlagSetDefaults(flagSet *flag.FlagSet) {
+func PrintFlagSetDefaults(flagSet *FlagSet) {
 	// The implementation of this method is dirty and relies on the internal implementation details
 	// of the flag package. Otherwise, it would be difficult (or impossible if following the same API)
 	// to provide own implementation since the flag package checks flag.Value types against unexported
@@ -117,7 +125,10 @@ func PrintFlagSetDefaults(flagSet *flag.FlagSet) {
 							names.WriteString("-")
 							names.WriteString(name)
 						}
-						return replaceDefaultsOutputItemName(s, names.String())
+						s = replaceDefaultsOutputItemName(s, names.String())
+					}
+					if fNames.isRequired {
+						s = addDefaultsRequiredMark(s)
 					}
 					return s
 				}
@@ -127,5 +138,5 @@ func PrintFlagSetDefaults(flagSet *flag.FlagSet) {
 		return s
 	}))
 
-	flagSet.PrintDefaults()
+	flagSet.FlagSet.PrintDefaults()
 }

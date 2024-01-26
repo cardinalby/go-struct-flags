@@ -9,6 +9,7 @@ import (
 	"strings"
 	"unsafe"
 
+	"github.com/cardinalby/go-struct-flags/cmdargs"
 	"github.com/cardinalby/go-struct-flags/stdutil"
 )
 
@@ -24,6 +25,7 @@ type registeredNamedFlagField struct {
 type registeredNamedFlagsField struct {
 	fields     []registeredNamedFlagField
 	isRequired bool
+	isZero     bool
 }
 
 // structRegisteredFields contains instruction for finishing parsing of a struct
@@ -31,7 +33,7 @@ type registeredNamedFlagsField struct {
 type structRegisteredFields struct {
 	// keys: field names, values: slice where each element corresponds to a registered flag (with different names)
 	namedFlagFields map[string]registeredNamedFlagsField
-	// keys: field names, values: field values that should be assigned with FlagSet.Args()
+	// keys: field names, values: field values that should be assigned with FlagSet.ArgStrings()
 	flagArgsToSet map[string]reflect.Value
 }
 
@@ -48,8 +50,10 @@ type FlagSet struct {
 	// registeredFields contains instructions for finishing parsing of the registered structs
 	// key is a pointer to a struct
 	registeredFields                  map[any]structRegisteredFields
+	requiredFlagNames                 map[string]struct{}
 	ignoreUnknown                     bool
 	ignoreUnknownTreatAmbiguousAsBool bool
+	flagsToIgnore                     stdutil.FormalTagNames
 	allowParsingMultipleAliases       bool
 	ignoredArgs                       []string
 }
@@ -57,8 +61,10 @@ type FlagSet struct {
 // Wrap creates a new FlagSet wrapping the given `stdFlagSet` and does not set stdFlagSet.Usage
 func Wrap(stdFlagSet *flag.FlagSet) *FlagSet {
 	return &FlagSet{
-		FlagSet:          stdFlagSet,
-		registeredFields: make(map[any]structRegisteredFields),
+		FlagSet:           stdFlagSet,
+		registeredFields:  make(map[any]structRegisteredFields),
+		flagsToIgnore:     make(stdutil.FormalTagNames),
+		requiredFlagNames: make(map[string]struct{}),
 	}
 }
 
@@ -98,6 +104,8 @@ func (fls *FlagSet) SetIgnoreUnknown(ignore bool) {
 // OR
 // 2. {a: true, b: true} - if treatAsBool == true
 // Default values is `false`.
+// It doesn't affect flags from fields that are defined in a registered struct but were passed as ignored to
+// Parse() call. Information about their type will be used to determine if they are bool flags or not.
 func (fls *FlagSet) SetIgnoreUnknownAmbiguousAsBoolFlags(treatAsBool bool) {
 	fls.ignoreUnknownTreatAmbiguousAsBool = treatAsBool
 }
@@ -116,7 +124,13 @@ func (fls *FlagSet) Parse(arguments []string) error {
 	}
 	fls.ignoredArgs = nil
 	if fls.ignoreUnknown {
-		arguments, fls.ignoredArgs = StripUnknownFlags(fls.FlagSet, arguments, fls.ignoreUnknownTreatAmbiguousAsBool)
+		argsPassed, argsIgnored := cmdargs.NewArgs(arguments).
+			WithFlagSet(fls.FlagSet).
+			WithAmbiguousAsBool(fls.ignoreUnknownTreatAmbiguousAsBool).
+			StripUnknownFlags(
+				fls.flagsToIgnore,
+			)
+		arguments, fls.ignoredArgs = argsPassed.Args, argsIgnored.Args
 	}
 	if err := fls.FlagSet.Parse(arguments); err != nil {
 		return err
@@ -175,6 +189,7 @@ func (fls *FlagSet) StructVarWithPrefix(p any, flagsPrefix string, ignoredFields
 		"",
 		"",
 		ignoredFieldsMap,
+		fls.flagsToIgnore,
 	)
 	if err != nil {
 		return err
@@ -196,7 +211,7 @@ func (fls *FlagSet) StructVarWithPrefix(p any, flagsPrefix string, ignoredFields
 
 // PrintDefaults prints the default FlagSet usage to wrapped FlagSet.Output grouping alternative flag names
 func (fls *FlagSet) PrintDefaults() {
-	PrintFlagSetDefaults(fls.FlagSet)
+	PrintFlagSetDefaults(fls)
 }
 
 func (fls *FlagSet) postProcessRegisteredFields() error {
@@ -259,7 +274,7 @@ func (fls *FlagSet) usage() {
 }
 
 func (fls *FlagSet) defaultUsage() {
-	DefaultUsage(fls.FlagSet)
+	DefaultUsage(fls)
 }
 
 // sprintf formats the message, prints it to output, and returns it.
@@ -270,12 +285,21 @@ func (fls *FlagSet) sprintf(format string, a ...any) string {
 }
 
 func (fls *FlagSet) registerNamedFlagField(info fieldInfo) (res registeredNamedFlagsField) {
-	res.isRequired = info.namedFlagRole.isRequired
+	isZero := false
 	for _, flagName := range info.namedFlagRole.flagNames {
-		res.fields = append(res.fields, registeredNamedFlagField{
-			flagName:     flagName,
-			postParseClb: info.namedFlagRole.varRegister(fls.FlagSet, flagName, info.namedFlagRole.usage),
-		})
+		registeredNamedFlagField := registeredNamedFlagField{
+			flagName: flagName,
+		}
+		registeredNamedFlagField.postParseClb, isZero = info.namedFlagRole.varRegister(
+			fls.FlagSet, flagName, info.namedFlagRole.usage,
+		)
+		res.fields = append(res.fields, registeredNamedFlagField)
+	}
+	res.isRequired = info.namedFlagRole.isRequired && isZero
+	if res.isRequired {
+		for _, flagName := range info.namedFlagRole.flagNames {
+			fls.requiredFlagNames[flagName] = struct{}{}
+		}
 	}
 	return res
 }

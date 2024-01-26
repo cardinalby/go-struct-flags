@@ -1,9 +1,10 @@
-package flago
+package cmdargs
 
 import (
 	"flag"
 	"testing"
 
+	"github.com/cardinalby/go-struct-flags/stdutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -15,6 +16,7 @@ func TestStripUnknownFlags(t *testing.T) {
 	testCases := []struct {
 		name                       string
 		args                       []string
+		ignoredFlagsWithKnownType  stdutil.FormalTagNames
 		ifTreatUnknownAsBool       expected
 		ifWaitForValueAfterUnknown expected
 	}{
@@ -22,11 +24,11 @@ func TestStripUnknownFlags(t *testing.T) {
 			name: "no args",
 			args: []string{},
 			ifTreatUnknownAsBool: expected{
-				res:      []string{},
+				res:      []string(nil),
 				stripped: nil,
 			},
 			ifWaitForValueAfterUnknown: expected{
-				res:      []string{},
+				res:      []string(nil),
 				stripped: nil,
 			},
 		},
@@ -60,6 +62,36 @@ func TestStripUnknownFlags(t *testing.T) {
 			ifTreatUnknownAsBool: expected{
 				res:      []string{"-s", "some", "-b", "value"},
 				stripped: []string{"-unknown"},
+			},
+			ifWaitForValueAfterUnknown: expected{
+				res:      []string{"-s", "some", "-b"},
+				stripped: []string{"-unknown", "value"},
+			},
+		},
+		{
+			name: "explicitly bool unknown flag with value",
+			args: []string{"-s", "some", "-b", "-unknown", "value"},
+			ignoredFlagsWithKnownType: stdutil.FormalTagNames{
+				"unknown": true,
+			},
+			ifTreatUnknownAsBool: expected{
+				res:      []string{"-s", "some", "-b", "value"},
+				stripped: []string{"-unknown"},
+			},
+			ifWaitForValueAfterUnknown: expected{
+				res:      []string{"-s", "some", "-b", "value"},
+				stripped: []string{"-unknown"},
+			},
+		},
+		{
+			name: "explicitly not bool unknown flag with value",
+			args: []string{"-s", "some", "-b", "-unknown", "value"},
+			ignoredFlagsWithKnownType: stdutil.FormalTagNames{
+				"unknown": false,
+			},
+			ifTreatUnknownAsBool: expected{
+				res:      []string{"-s", "some", "-b"},
+				stripped: []string{"-unknown", "value"},
 			},
 			ifWaitForValueAfterUnknown: expected{
 				res:      []string{"-s", "some", "-b"},
@@ -194,13 +226,20 @@ func TestStripUnknownFlags(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			actual, stripped := StripUnknownFlags(fs, tc.args, true)
-			require.ElementsMatch(t, tc.ifTreatUnknownAsBool.res, actual, "ifTreatUnknownAsBool.res")
-			require.ElementsMatch(t, tc.ifTreatUnknownAsBool.stripped, stripped, "ifTreatUnknownAsBool.stripped")
+			args := NewArgs(tc.args).
+				WithFlagSet(fs)
 
-			actual, stripped = StripUnknownFlags(fs, tc.args, false)
-			require.ElementsMatch(t, tc.ifWaitForValueAfterUnknown.res, actual, "ifWaitForValueAfterUnknown.res")
-			require.ElementsMatch(t, tc.ifWaitForValueAfterUnknown.stripped, stripped, "ifWaitForValueAfterUnknown.stripped")
+			actual, stripped := args.
+				WithAmbiguousAsBool(true).
+				StripUnknownFlags(tc.ignoredFlagsWithKnownType)
+			require.Equal(t, tc.ifTreatUnknownAsBool.res, actual.Args, "ifTreatUnknownAsBool.res")
+			require.Equal(t, tc.ifTreatUnknownAsBool.stripped, stripped.Args, "ifTreatUnknownAsBool.stripped")
+
+			actual, stripped = args.
+				WithAmbiguousAsBool(false).
+				StripUnknownFlags(tc.ignoredFlagsWithKnownType)
+			require.Equal(t, tc.ifWaitForValueAfterUnknown.res, actual.Args, "ifWaitForValueAfterUnknown.res")
+			require.Equal(t, tc.ifWaitForValueAfterUnknown.stripped, stripped.Args, "ifWaitForValueAfterUnknown.stripped")
 		})
 	}
 }

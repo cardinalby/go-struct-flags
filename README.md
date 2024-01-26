@@ -190,7 +190,8 @@ Defines flag usage message for a field. Should be used only for fields with `fla
 ### 🔸 `flagRequired="true"`
 
 Defines that the field is required and `Parse()` will return an **error** containing `flago.ErrIsRequired` 
-if the flag is not passed.
+if the flag is not passed and doesn't have a default value (field is not initialized by non-zero value at the 
+moment of registration)
 
 ## Assign remaining args
 

@@ -27,7 +27,7 @@ type namedFlagRole struct {
 	usage       string
 	roleTagName string
 	isRequired  bool
-	isIgnored   bool
+	isBool      bool
 }
 
 func (r namedFlagRole) getRoleTagName() string {

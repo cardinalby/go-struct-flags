@@ -221,11 +221,12 @@ func TestIgnoredFields(t *testing.T) {
 		N string `flag:"n"`
 	}
 	type s struct {
-		Int  int      `flag:"i"`
-		Bool bool     `flag:"b"`
-		Str  string   `flag:"s"`
-		Args []string `flagArgs:"true"`
-		X    nested   `flagPrefix:"x-"`
+		Int   int      `flag:"i"`
+		Bool  bool     `flag:"b"`
+		Bool2 bool     `flag:"b2"`
+		Str   string   `flag:"s"`
+		Args  []string `flagArgs:"true"`
+		X     nested   `flagPrefix:"x-"`
 	}
 
 	t.Run("error", func(t *testing.T) {
@@ -238,16 +239,17 @@ func TestIgnoredFields(t *testing.T) {
 	t.Run("ignore", func(t *testing.T) {
 		fls := NewFlagSet("", flag.ContinueOnError)
 		structVal := s{}
-		require.NoError(t, fls.StructVarWithPrefix(&structVal, "", &structVal.Int, &structVal.X))
+		require.NoError(t, fls.StructVarWithPrefix(
+			&structVal, "", &structVal.Int, &structVal.X, &structVal.Bool2))
 
 		fls.SetIgnoreUnknown(true)
-		require.NoError(t, fls.Parse([]string{"--s=def", "-b", "-x-n=abc", "--i", "3"}))
+		require.NoError(t, fls.Parse([]string{"--s=def", "-b", "-x-n=abc", "--i", "3", "-b2", "ghi"}))
 		require.Equal(t, 0, structVal.Int)
 		require.Equal(t, "def", structVal.Str)
 		require.Equal(t, "", structVal.X.N)
 		require.True(t, structVal.Bool)
-		require.ElementsMatch(t, []string{"-x-n=abc", "--i", "3"}, fls.GetIgnoredArgs())
-		require.ElementsMatch(t, nil, structVal.Args)
+		require.ElementsMatch(t, []string{"-x-n=abc", "--i", "3", "-b2"}, fls.GetIgnoredArgs())
+		require.ElementsMatch(t, []string{"ghi"}, structVal.Args)
 	})
 }
 
@@ -439,7 +441,7 @@ func TestIgnoreUnknownTags(t *testing.T) {
 	})
 }
 
-func TestRequiredFlag(t *testing.T) {
+func TestRequiredFlagWithDefaultValue(t *testing.T) {
 	type testStruct struct {
 		Int int    `flags:"i,i2" flagRequired:"true"`
 		Str string `flag:"s"`
@@ -449,12 +451,53 @@ func TestRequiredFlag(t *testing.T) {
 		Int: 2,
 	}
 	require.NoError(t, fls.StructVarWithPrefix(&structVal, ""))
-	require.ErrorIs(t, fls.Parse([]string{"--s", "abc"}), ErrIsRequired)
+	require.NoError(t, fls.Parse([]string{"--s", "abc"}))
 	require.Equal(t, 2, structVal.Int)
 	require.Equal(t, "abc", structVal.Str)
 }
 
 func TestMissingRequiredFlag(t *testing.T) {
+	type testStruct struct {
+		Int int    `flags:"i,i2" flagRequired:"true"`
+		Str string `flag:"s"`
+	}
+	fls := NewFlagSet("", flag.ContinueOnError)
+	fls.Usage = func() {}
+	structVal := testStruct{}
+	require.NoError(t, fls.StructVarWithPrefix(&structVal, ""))
+	require.ErrorIs(t, fls.Parse([]string{"--s", "1"}), ErrIsRequired)
+}
+
+func TestPointerRequiredFlag(t *testing.T) {
+	type testStruct struct {
+		Str *string `flag:"s" flagRequired:"true"`
+	}
+	fls := NewFlagSet("", flag.ContinueOnError)
+	fls.Usage = func() {}
+	structVal := testStruct{}
+	require.NoError(t, fls.StructVarWithPrefix(&structVal, ""))
+	require.ErrorIs(t, fls.Parse([]string{}), ErrIsRequired)
+	require.NoError(t, fls.Parse([]string{"-s", "abc"}))
+	require.NotNil(t, structVal.Str)
+	require.Equal(t, "abc", *structVal.Str)
+}
+
+func TestPointerRequiredFlagWithDefaultValue(t *testing.T) {
+	type testStruct struct {
+		Str *string `flag:"s" flagRequired:"true"`
+	}
+	fls := NewFlagSet("", flag.ContinueOnError)
+	fls.Usage = func() {}
+	structVal := testStruct{
+		Str: ptr("default"),
+	}
+	require.NoError(t, fls.StructVarWithPrefix(&structVal, ""))
+	require.NoError(t, fls.Parse([]string{""}))
+	require.NotNil(t, structVal.Str)
+	require.Equal(t, "default", *structVal.Str)
+}
+
+func TestProvidedRequiredFlag(t *testing.T) {
 	type testStruct struct {
 		Int int    `flags:"i,i2" flagRequired:"true"`
 		Str string `flag:"s"`
@@ -680,10 +723,14 @@ func TestMultiNamesFlagSetUsage(t *testing.T) {
 
 	type nestedStruct struct {
 		X string `flag:"x" flagUsage:"usage_x"`
-		Y string `flags:"y,yy" flagUsage:"usage_y"`
+		Y string `flags:"y,yy" flagUsage:"usage_y" flagRequired:"true"`
 	}
 	type simpleStruct struct {
-		S       string       `flag:"s" flagUsage:"usage_s"`
+		S       string       `flag:"s" flagUsage:"usage_s" flagRequired:"true"`
+		B       bool         `flags:"b1,b2" flagUsage:"usage_b12" flagRequired:"true"`
+		W       bool         `flag:"w" flagUsage:"usage_w" flagRequired:"true"`
+		Z       bool         `flag:"z" flagUsage:"usage_z"`
+		ZZ      bool         `flag:"zz"`
 		Nested2 nestedStruct `flagPrefix:"n2-" flagUsagePrefix:"usage_n2_pr: "`
 		Sp      *string      `flag:"sp" flagUsage:"usage_sp"`
 		Nested  nestedStruct `flagPrefix:"n-"`
@@ -697,18 +744,24 @@ func TestMultiNamesFlagSetUsage(t *testing.T) {
 	require.NoError(t, fls.StructVar(&structVal))
 
 	expectedUsage := `Usage of fls_name:
+  -b1 -b2
+    	* usage_b12
   -n-x string
     	usage_x
   -n-y -n-yy string
-    	usage_y
+    	* usage_y
   -n2-x string
     	usage_n2_pr: usage_x
   -n2-y -n2-yy string
-    	usage_n2_pr: usage_y
+    	* usage_n2_pr: usage_y
   -s string
     	usage_s (default "s_default")
   -sp string
     	usage_sp
+  -w	* usage_w
+  -z	usage_z
+  -zz
+    	
 `
 	require.Equal(
 		t,
