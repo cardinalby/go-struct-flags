@@ -241,7 +241,16 @@ If a field has `encoding.TextUnmarshaler` interface, it also should implement `e
 
 The library will call `FlagSet.TextVar()` on such fields that requires a default "marshaler" value.
 
+## `cmdargs` sub-package
 
+Provides helper tools for manipulating command line arguments:
+- Iterate over arguments as tokens with known roles
+- Iterate over flags with values, unnamed args, ...
+- Lookup for flags by name
+- Delete flag by name
+- Upsert flag by name
+- Mutate flags (make it inline, change value, name, ...)
+- Strip unknown flags
 
 
 
